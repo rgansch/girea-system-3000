@@ -127,7 +127,8 @@ def generate_position_command(percentage: int) -> bytearray:
     """Generates the command for setting absolute blinds position."""
     if not 0 <= percentage <= 100:
         raise ValueError("Percentage must be between 0 and 100.")
-    return _generate_command(PROPERTY_ID_SET_POSITION, percentage)
+    per_to_byte = (100 - percentage) * 255 // 100
+    return _generate_command(PROPERTY_ID_SET_POSITION, per_to_byte)
 
 
 class GiraBLEClient:
@@ -174,8 +175,9 @@ class GiraBLEClient:
                     BleakClient, 
                     device, 
                     self.name,
-                    timeout=10,
-                    max_attempts=3
+                    pair=True,
+                    timeout=60,
+                    max_attempts=5
                 )
                 self._client = client
                 LOGGER.info("Successfully connected to %s (%s) and sending command.", self.name, self.address)

@@ -4,12 +4,18 @@
   "name": "Girea System 3000 (Gira Reverse Engineered)",
   "bluetooth": [
     {
-      "manufacturer_data_start": [118],
+      "local_name": "Jal*",
       "manufacturer_id": 1412
     }
   ],
+  "codeowners": [
+    "@clentfort",
+    "@stho",
+    "@rgansch"
+  ],
   "config_flow": true,
   "dependencies": ["bluetooth_adapters"],
-  "documentation": "https://github.com/clentfort/girea_system_3000",
-  "integration_type": "device"
+  "documentation": "https://github.com/clentfort/girea-system-3000",
+  "integration_type": "device",
+  "issue_tracker": "https://github.com/stho/girea-system-3000/issues"
 }
