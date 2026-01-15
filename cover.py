@@ -1,4 +1,4 @@
-"""Platform for the Girea System 3000 cover integration."""
+"""Platform for the Gira System 3000 cover integration."""
 from __future__ import annotations
 
 import logging
@@ -18,7 +18,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import DOMAIN, LOGGER
-from .gira_ble import GiraBLEClient, GiraPassiveBluetoothDataUpdateCoordinator
+from .gira_ble import GiraCoverBLEClient, GiraCoverPassiveBluetoothDataUpdateCoordinator
 
 
 async def async_setup_entry(
@@ -26,20 +26,19 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Girea System 3000 cover from a config entry."""
+    """Set up Gira System 3000 cover from a config entry."""
     data = hass.data[DOMAIN][config_entry.entry_id]
-    coordinator: GiraPassiveBluetoothDataUpdateCoordinator = data["coordinator"]
-    client: GiraBLEClient = data["client"]
+    coordinator: GiraCoverPassiveBluetoothDataUpdateCoordinator = data["coordinator"]
+    client: GiraCoverBLEClient = data["client"]
 
-    # Add the Gira shutter as a Home Assistant Cover entity
-    cover_entity = GireaSystem3000Cover(coordinator, client, config_entry)
-    async_add_entities([cover_entity])
-    
-    LOGGER.debug("Coordinator setup complete for %s", config_entry.title)
+    if config_entry.data["devicetype"] == "Jal+Schaltuhr":
+        # Add the Gira shutter as a Home Assistant Cover entity
+        cover_entity = GiraSystem3000Cover(coordinator, client, config_entry)
+        async_add_entities([cover_entity])
+        LOGGER.info("Coordinator setup complete for %s", config_entry.title)
 
-
-class GireaSystem3000Cover(
-    CoordinatorEntity[GiraPassiveBluetoothDataUpdateCoordinator], CoverEntity
+class GiraSystem3000Cover(
+    CoordinatorEntity[GiraCoverPassiveBluetoothDataUpdateCoordinator], CoverEntity
 ):
     """Representation of a Gira System 3000 Cover."""
 

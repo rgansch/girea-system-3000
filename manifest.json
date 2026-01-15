@@ -6,6 +6,10 @@
     {
       "local_name": "Jal*",
       "manufacturer_id": 1412
+    },  
+    {
+      "local_name": "Thermostat",
+      "manufacturer_id": 1412
     }
   ],
   "config_flow": true,

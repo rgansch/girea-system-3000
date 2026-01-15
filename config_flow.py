@@ -12,10 +12,10 @@ from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.device_registry import format_mac
+from homeassistant.helpers.selector import selector
 from bleak import BleakClient, BleakError
 
 from .const import DOMAIN
-from .gira_ble import GiraBLEClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class GireaSystem3000ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Girea System 3000."""
 
     VERSION = 1
-    MINOR_VERSION = 1
+    MINOR_VERSION = 2
 
     def __init__(self) -> None:
         """Initialize the config flow."""
@@ -62,6 +62,7 @@ class GireaSystem3000ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # User submitted the form, validate and create the entry
             address = user_input["address"]
             name = user_input.get("name", self._discovered_name)
+            devicetype = user_input["devicetype"]
 
             try:
                 # Attempt to connect to validate the device
@@ -69,7 +70,7 @@ class GireaSystem3000ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if not device:
                     errors["base"] = "cannot_connect"
                 else:
-                    async with BleakClient(device) as client:
+                    async with BleakClient(device, pair=True, timeout=30) as client:
                         if not client.is_connected:
                             errors["base"] = "cannot_connect"
             except (BleakError, Exception):
@@ -81,7 +82,7 @@ class GireaSystem3000ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not errors:
                 return self.async_create_entry(
                     title=name,
-                    data={"address": address, "name": name},
+                    data={"address": address, "name": name, "devicetype": devicetype},
                 )
         
         # Show the form
@@ -90,6 +91,8 @@ class GireaSystem3000ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema({
                 vol.Required("address", default=self._discovered_address): str,
                 vol.Required("name", default=self._discovered_name): str,
+                vol.Required("devicetype", default="Jal+Schaltuhr"): selector({
+                    "select": {"options": ["Jal+Schaltuhr", "Thermostat"]}})
             }),
             errors=errors,
         )
@@ -104,6 +107,8 @@ class GireaSystem3000ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             address = user_input["address"]
             name = user_input.get("name")
+            devicetype = user_input["devicetype"]
+
             unique_id = format_mac(address)
             await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
@@ -111,25 +116,27 @@ class GireaSystem3000ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 device = bluetooth.async_ble_device_from_address(self.hass, address)
                 if not device:
-                    errors["base"] = "cannot_connect"
+                    errors["base"] = "no device BLE advertisments found"
                 else:
-                    async with BleakClient(device) as client:
+                    async with BleakClient(device, pair=True, timeout=30) as client:
                         if not client.is_connected:
-                            errors["base"] = "cannot_connect"
+                            errors["base"] = "connection/pairing failed"
             except (BleakError, Exception):
                 _LOGGER.exception("Failed to connect to Gira device at %s during manual setup.", address)
                 errors["base"] = "cannot_connect"
 
             if not errors:
                 return self.async_create_entry(
-                    title=name or f"Gira Shutter {address[-5:].replace(':', '')}",
-                    data={"address": address, "name": name},
+                    title=name or f"Gira device {address[-5:].replace(':', '')}",
+                    data={"address": address, "name": name, "devicetype": devicetype},
                 )
 
         return self.async_show_form(
             step_id="user", data_schema=vol.Schema({
                 vol.Required("address"): str,
                 vol.Required("name"): str,
+                vol.Required("devicetype", default="Jal+Schaltuhr"): selector({
+                    "select": {"options": ["Jal+Schaltuhr", "Thermostat"]}})
             }), errors=errors
         )
 
