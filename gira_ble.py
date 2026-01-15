@@ -281,7 +281,7 @@ class GiraClimatePassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdat
         if prefix_index_current >= 0:
         # Ensure we have enough bytes after the prefix to read the position
             if len(manufacturer_data) != (prefix_index_current + len(CLIMATE_BROADCAST_CURRENT_PREFIX) + 2):
-                LOGGER.debug("Data frame lenght not plausible")
+                LOGGER.debug("Data frame length not plausible")
                 return None
 
             # Extract the position byte, which is 1 byte after the prefix
@@ -304,7 +304,7 @@ class GiraClimatePassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdat
         if prefix_index_target >= 0:
             # Ensure we have enough bytes after the prefix to read the position
             if len(manufacturer_data) != (prefix_index_target + len(CLIMATE_BROADCAST_TARGET_PREFIX) + 2):
-                LOGGER.debug("Data frame lenght not plausible")
+                LOGGER.debug("Data frame length not plausible")
                 return None
 
             # Extract the position byte, which is 1 byte after the prefix
@@ -331,17 +331,15 @@ def byte_to_temperature(temp_bytes: bytearray) -> int:
     if temp_raw <= 2048:
         temperature = temp_raw / 100.0
     else:
-        temperature = (temp_raw + 1 - 2050)*0.02 + 20.50
+        temperature = (temp_raw - 1024 - 2048)*0.02 + 20.48
 
     return temperature
 
 def temperature_to_byte(temperature: float) -> bytearray:
-    temp_int = int(temperature*100 + 0.5)
-
-    if temp_int < 20.48:
+    if temperature < 20.48:
         temp_raw = int(temperature*100 + 0.5)
     else:
-        temp_raw = int((temperature - 20.48)/0.02 + 0.5) + 2048
+        temp_raw = int((temperature - 20.48)/0.02 + 0.5) + 2048 + 1024
 
     return temp_raw.to_bytes(2, 'big')
 
