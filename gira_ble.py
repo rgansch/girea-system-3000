@@ -1,6 +1,7 @@
 """Bluetooth LE communication for Gira System 3000 devices."""
 import asyncio
 import logging
+import time
 from typing import Any, cast, Optional
 
 from bleak import BleakClient, BleakError, BLEDevice
@@ -15,6 +16,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .const import DOMAIN, LOGGER
+
+# --- Constants to throttle updates ----
+# BLE advertisments are sent very often resulting in a flood of data
+# To reduce the spam in HA (esp. data logger) a throttling is built in
+# For cover: new values and every x seconds
+# For thermostat target temp: new values and every x seconds
+# For thermostat current value: average of x seconds
+UPDATE_INTERVALL = 60
 
 # --- Constants for Gira Broadcast Parsing ---
 GIRA_MANUFACTURER_ID = 1412
@@ -60,6 +69,8 @@ class GiraCoverPassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdateC
             connectable=False,
         )
         self._device_name = name  # Store name separately since 'name' property is read-only
+        self._last_position = None
+        self._last_position_update = 0
         LOGGER.debug("Created coordinator instance for %s (%s)", name, address)
 
     def _async_handle_unavailable(
@@ -110,10 +121,14 @@ class GiraCoverPassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdateC
             ha_position,
         )
         
-        # This is the correct way to update the data for a passive coordinator
-        # by returning a dictionary containing the new data.
         self.data = {"position": ha_position}
-        self.async_update_listeners()
+
+        # Only update on new value or if UPDATE_INTERVALL seconds passed
+        if (ha_position != self._last_position) or \
+           ((time.time() - self._last_position_update) > UPDATE_INTERVALL):
+           self._last_position_update = time.time()
+           self._last_position = ha_position
+           self.async_update_listeners()
 
 def _generate_command(property_id: int, value: int) -> bytearray:
     """Generates the full command byte array from its parts."""
@@ -230,8 +245,11 @@ class GiraCoverBLEClient:
 CLIMATE_COMMAND_PREFIX = bytearray.fromhex("F6006501F51001")
 
 # Broadcast structure prefix
-CLIMATE_BROADCAST_TARGET_PREFIX = bytearray.fromhex("F7014101FE1001") # Also other prefix variations in log, check for more data in that frame TODO
-CLIMATE_BROADCAST_CURRENT_PREFIX = bytearray.fromhex("F6006501F51001")
+#CLIMATE_BROADCAST_TARGET_PREFIX = bytearray.fromhex("F7006501F51001") # Also other prefix variations in log, check for more data in that frame TODO
+CLIMATE_BROADCAST_TARGET_PREFIX = bytearray.fromhex("F7006501")
+CLIMATE_BROADCAST_TARGET_SUFFIX= bytearray.fromhex("1001")
+CLIMATE_BROADCAST_CURRENT_PREFIX = bytearray.fromhex("F7014101")
+CLIMATE_BROADCAST_CURRENT_SUFFIX= bytearray.fromhex("1001")
 
 class GiraClimatePassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdateCoordinator):
     """Coordinator for receiving passive BLE broadcasts from Gira thermostats."""
@@ -246,6 +264,11 @@ class GiraClimatePassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdat
             connectable=False,
         )
         self._device_name = name  # Store name separately since 'name' property is read-only
+        self._current_temperature_avg = None
+        self._current_temperature_avg_update = 0
+        self._last_current_temperature_update = 0
+        self._last_target_temperature = None
+        self._last_target_temperature_update = 0
         LOGGER.debug("Created coordinator instance for %s (%s)", name, address)
 
     def _async_handle_unavailable(
@@ -279,52 +302,100 @@ class GiraClimatePassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdat
 
         # Received current temperature frame
         if prefix_index_current >= 0:
-        # Ensure we have enough bytes after the prefix to read the position
-            if len(manufacturer_data) != (prefix_index_current + len(CLIMATE_BROADCAST_CURRENT_PREFIX) + 2):
+        # Ensure we have enough bytes after the prefix to read the temperature
+            if len(manufacturer_data) != (prefix_index_current + len(CLIMATE_BROADCAST_CURRENT_PREFIX) 
+                                          +1 + len(CLIMATE_BROADCAST_CURRENT_SUFFIX) + 2):
                 LOGGER.debug("Data frame length not plausible")
                 return None
 
-            # Extract the position byte, which is 1 byte after the prefix
-            temperature_bytes = manufacturer_data[prefix_index_current + len(CLIMATE_BROADCAST_CURRENT_PREFIX) : ]
+            # Extract the temperature byte and some unknown data byte
+            unknown_byte = manufacturer_data[prefix_index_current + 
+                                             len(CLIMATE_BROADCAST_CURRENT_PREFIX)]
+            temperature_bytes = manufacturer_data[prefix_index_current + 
+                                                  len(CLIMATE_BROADCAST_CURRENT_PREFIX) +
+                                                  1 +
+                                                  len(CLIMATE_BROADCAST_CURRENT_SUFFIX)
+                                                  : ]
             current_temperature = byte_to_temperature(temperature_bytes)
 
             LOGGER.info(
-                "Gira broadcast received from %s. Raw data: %s, Temperature byte: %s, Current temperature: %s degree",
+                "Gira broadcast received from %s. Raw data: %s, Unknown byte: %s, Temperature byte: %s, Current temperature: %s degree",
                 self._device_name,
                 manufacturer_data.hex(),
+                hex(unknown_byte),
                 temperature_bytes.hex(),
                 current_temperature
             )
-            
-            # This is the correct way to update the data for a passive coordinator
-            # by returning a dictionary containing the new data.
+
             self.data = {"current_temperature": current_temperature}
 
         # Received target temperature frame
         if prefix_index_target >= 0:
-            # Ensure we have enough bytes after the prefix to read the position
-            if len(manufacturer_data) != (prefix_index_target + len(CLIMATE_BROADCAST_TARGET_PREFIX) + 2):
+            # Ensure we have enough bytes after the prefix to read the temperature
+            if len(manufacturer_data) != (prefix_index_target + len(CLIMATE_BROADCAST_TARGET_PREFIX) 
+                                          +1 + len(CLIMATE_BROADCAST_TARGET_SUFFIX) + 2):
                 LOGGER.debug("Data frame length not plausible")
                 return None
 
-            # Extract the position byte, which is 1 byte after the prefix
-            temperature_bytes = manufacturer_data[prefix_index_target + len(CLIMATE_BROADCAST_TARGET_PREFIX) : ]
+            # Extract the temperature byte and some unknown data byte
+            unknown_byte = manufacturer_data[prefix_index_target + 
+                                             len(CLIMATE_BROADCAST_TARGET_PREFIX)]
+            temperature_bytes = manufacturer_data[prefix_index_target + 
+                                                  len(CLIMATE_BROADCAST_TARGET_PREFIX) +
+                                                  1 +
+                                                  len(CLIMATE_BROADCAST_TARGET_SUFFIX)
+                                                  : ]
             target_temperature = byte_to_temperature(temperature_bytes)
 
             LOGGER.info(
-                "Gira broadcast received from %s. Raw data: %s, Position byte: %s, Target temperature: %s degree",
+                "Gira broadcast received from %s. Raw data: %s, Unknown byte: %s, Temperature byte: %s, Target temperature: %s degree",
                 self._device_name,
                 manufacturer_data.hex(),
+                hex(unknown_byte),
                 temperature_bytes.hex(),
                 target_temperature
-            )
-            
-            # This is the correct way to update the data for a passive coordinator
-            # by returning a dictionary containing the new data.
-            self.data = {"target_temperature": target_temperature}
-            
-        self.async_update_listeners()
+            )   
 
+        # Update listeners, with throttling
+        if prefix_index_current >= 0:
+            # Init of averaging and update current after first received current temperature
+            if self._last_current_temperature_update == 0:                
+                self._current_temperature_avg = 0
+                self._current_temperature_avg_update = time.time()
+
+                self._last_current_temperature_update = time.time()
+                self.data = {"current_temperature": current_temperature}
+                self.async_update_listeners()
+            # Accumulate weighted sum (time) of received current temperature
+            else:
+                self._current_temperature_avg = self._current_temperature_avg + \
+                    current_temperature * (time.time() - self._current_temperature_avg_update)
+                self._current_temperature_avg_update = time.time()
+        
+                # Send average after update intervall and reinit the average
+                if ((time.time() - self._last_current_temperature_update) > UPDATE_INTERVALL):
+                    current_temperature_avg = self._current_temperature_avg / (time.time() - self._last_current_temperature_update)
+                    self._current_temperature_avg = 0
+                    self._current_temperature_avg_update = time.time()
+                    
+                    self._last_current_temperature_update = time.time()
+                    self.data = {"current_temperature": current_temperature_avg}
+                    self.async_update_listeners()
+
+        if prefix_index_target >= 0:
+            if (target_temperature != self._last_target_temperature) or \
+                ((time.time() - self._last_target_temperature_update) > UPDATE_INTERVALL):
+                self._last_target_temperature_update = time.time()
+                self._last_target_temperature = target_temperature
+
+                self.data = {"target_temperature": target_temperature}
+                self.async_update_listeners()
+
+
+# Temperature to/from byte conversion
+# <20.48° straightforward 0.01 conversion factor (0.01° per bit)
+# >=20.48° changes to 0.02 conversion factor (0.02° per bit) and for some reason adds a flat 1024
+# i.e. range from 0x07FF to 0xC00 is unused
 def byte_to_temperature(temp_bytes: bytearray) -> int:
     temp_raw = int.from_bytes(temp_bytes, byteorder='big', signed=False)
 
@@ -412,5 +483,8 @@ class GiraClimateBLEClient:
 
     async def send_temperature_command(self, temperature: float) -> None:
         """Send the command to raise the shutter."""
+        if (temperature < 10) or (temperature > 30):
+            LOGGER.debug("Temperature to send exceeds allowed value range: %s", temperature)
+            return
         command = temperature_to_byte(temperature)
         await self.send_command(CLIMATE_COMMAND_PREFIX + command)

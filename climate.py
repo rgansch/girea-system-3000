@@ -50,8 +50,7 @@ class GireaSystem3000Climate(
           ClimateEntityFeature.TARGET_TEMPERATURE
     )
     _attr_hvac_modes = [
-        HVACMode.OFF, 
-        HVACMode.HEAT
+        HVACMode.HEAT,
     ]
     _attr_target_temperature_step = 0.5
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
@@ -79,8 +78,8 @@ class GireaSystem3000Climate(
         self._attr_current_temperature = None  # Initialize the state to None
         self._attr_target_temperature = None
 
-        self._attr_hvac_mode = HVACMode.OFF # Dummy values, needs to be updated with BLE data
-        self._attr_hvac_action = HVACMode.OFF
+        self._attr_hvac_mode = HVACMode.HEAT 
+        #self._attr_hvac_action = HVACMode.HEAT
 
         LOGGER.debug("Created climate entity for %s", client.name)
 
@@ -99,11 +98,6 @@ class GireaSystem3000Climate(
     def hvac_modes(self) -> list[HVACMode]:
         """Return the list of available HVAC modes."""
         return self._attr_hvac_modes
-
-    @property
-    def hvac_action(self) -> HVACAction | None:
-        """Return the current HVAC action."""
-        return self._attr_hvac_action
 
     @property
     def min_temp(self) -> float:
