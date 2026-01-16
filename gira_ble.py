@@ -17,20 +17,11 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .const import DOMAIN, LOGGER
 
-# --- Constants to throttle updates ----
-# BLE advertisments are sent very often resulting in a flood of data
-# To reduce the spam in HA (esp. data logger) a throttling is built in
-# For cover: new values and every x seconds
-# For thermostat target temp: new values and every x seconds
-# For thermostat current value: average of x seconds
-UPDATE_INTERVALL = 60
-
 # --- Constants for Gira Broadcast Parsing ---
 GIRA_MANUFACTURER_ID = 1412
 
 # Define the correct GATT Characteristic UUID.
 GIRA_COMMAND_CHARACTERISTIC_UUID = "97696341-f77a-43ae-8c35-09f0c5245308"
-
 
 ##### COVER ######
 
@@ -55,7 +46,6 @@ COVER_VALUE_STOP = 0x00 # Stop command uses 0x00 as its value
 # The correct, full prefix for a position broadcast
 COVER_BROADCAST_PREFIX = bytearray.fromhex("F7032001F61001")
 
-
 class GiraCoverPassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdateCoordinator):
     """Coordinator for receiving passive BLE broadcasts from Gira shutters."""
 
@@ -69,8 +59,6 @@ class GiraCoverPassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdateC
             connectable=False,
         )
         self._device_name = name  # Store name separately since 'name' property is read-only
-        self._last_position = None
-        self._last_position_update = 0
         LOGGER.debug("Created coordinator instance for %s (%s)", name, address)
 
     def _async_handle_unavailable(
@@ -123,12 +111,7 @@ class GiraCoverPassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdateC
         
         self.data = {"position": ha_position}
 
-        # Only update on new value or if UPDATE_INTERVALL seconds passed
-        if (ha_position != self._last_position) or \
-           ((time.time() - self._last_position_update) > UPDATE_INTERVALL):
-           self._last_position_update = time.time()
-           self._last_position = ha_position
-           self.async_update_listeners()
+        self.async_update_listeners()
 
 def _generate_command(property_id: int, value: int) -> bytearray:
     """Generates the full command byte array from its parts."""
@@ -238,7 +221,6 @@ class GiraCoverBLEClient:
         command = generate_position_command(percentage)
         await self.send_command(command)
 
-
 ##### CLIMATE ######
 
 # Basic command structure prefix
@@ -264,11 +246,6 @@ class GiraClimatePassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdat
             connectable=False,
         )
         self._device_name = name  # Store name separately since 'name' property is read-only
-        self._current_temperature_avg = None
-        self._current_temperature_avg_update = 0
-        self._last_current_temperature_update = 0
-        self._last_target_temperature = None
-        self._last_target_temperature_update = 0
         LOGGER.debug("Created coordinator instance for %s (%s)", name, address)
 
     def _async_handle_unavailable(
@@ -326,7 +303,6 @@ class GiraClimatePassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdat
                 temperature_bytes.hex(),
                 current_temperature
             )
-
             self.data = {"current_temperature": current_temperature}
 
         # Received target temperature frame
@@ -355,41 +331,9 @@ class GiraClimatePassiveBluetoothDataUpdateCoordinator(PassiveBluetoothDataUpdat
                 temperature_bytes.hex(),
                 target_temperature
             )   
+            self.data = {"target_temperature": target_temperature}
 
-        # Update listeners, with throttling
-        if prefix_index_current >= 0:
-            # Init of averaging and update current after first received current temperature
-            if self._last_current_temperature_update == 0:                
-                self._current_temperature_avg = 0
-                self._current_temperature_avg_update = time.time()
-
-                self._last_current_temperature_update = time.time()
-                self.data = {"current_temperature": current_temperature}
-                self.async_update_listeners()
-            # Accumulate weighted sum (time) of received current temperature
-            else:
-                self._current_temperature_avg = self._current_temperature_avg + \
-                    current_temperature * (time.time() - self._current_temperature_avg_update)
-                self._current_temperature_avg_update = time.time()
-        
-                # Send average after update intervall and reinit the average
-                if ((time.time() - self._last_current_temperature_update) > UPDATE_INTERVALL):
-                    current_temperature_avg = self._current_temperature_avg / (time.time() - self._last_current_temperature_update)
-                    self._current_temperature_avg = 0
-                    self._current_temperature_avg_update = time.time()
-                    
-                    self._last_current_temperature_update = time.time()
-                    self.data = {"current_temperature": current_temperature_avg}
-                    self.async_update_listeners()
-
-        if prefix_index_target >= 0:
-            if (target_temperature != self._last_target_temperature) or \
-                ((time.time() - self._last_target_temperature_update) > UPDATE_INTERVALL):
-                self._last_target_temperature_update = time.time()
-                self._last_target_temperature = target_temperature
-
-                self.data = {"target_temperature": target_temperature}
-                self.async_update_listeners()
+        self.async_update_listeners()
 
 
 # Temperature to/from byte conversion
