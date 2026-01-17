@@ -54,7 +54,7 @@ class GiraSystem3000Cover(
 
     def __init__(
         self,
-        coordinator: GiraPassiveBluetoothDataUpdateCoordinator,
+        coordinator: GiraCoverPassiveBluetoothDataUpdateCoordinator,
         client: GiraBLEClient,
         config_entry: ConfigEntry,
     ) -> None:

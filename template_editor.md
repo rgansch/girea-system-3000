@@ -7,6 +7,7 @@ Adapted from https://community.home-assistant.io/t/create-generic-template/50033
 template:
   - sensor:
   # Current temparature sensors (unfiltered) for all climate devices
+  # Creates unfiltered helpers to use for platform: filter
     {%- set clim = states.climate | map(attribute='entity_id') | list %} {% for c in clim %}
     - name: {{c | regex_replace('climate.', '')}}_current_temperature_unfiltered
       state: >
@@ -19,13 +20,7 @@ template:
 
   # Target temperature for all climate devices
   {%- set clim = states.climate | map(attribute='entity_id') | list %} {% for c in clim %}
-  - triggers:
-      - trigger: numeric_state
-        entity_id: {{c}}
-        attribute: "temperature"
-        above: 0
-        below: 50
-    sensor:
+  - sensor:
       name: {{c | regex_replace('climate.', '')}}_target_temperature
       state: >
         {% raw %}{{state_attr('{% endraw %}{{c}}{% raw %}', 'temperature')}}{%endraw%}
@@ -37,13 +32,7 @@ template:
   
   # Current position for all cover devices
   {%- set clim = states.cover | map(attribute='entity_id') | list %} {% for c in clim %}
-  - triggers:
-      - trigger: numeric_state
-        entity_id: {{c}}
-        attribute: "current_position"
-        above: 0
-        below: 100
-    sensor:
+  - sensor:
       name: {{c | regex_replace('cover.', '')}}_current_position
       state: >
         {% raw %}{{state_attr('{% endraw %}{{c}}{% raw %}', 'current_position')}}{%endraw%}
@@ -52,8 +41,7 @@ template:
       availability: >
         {% raw %}{{state_attr('{%endraw%}{{c}}{%raw%}', 'current_position')| is_number }}{%endraw%}
   {% endfor %}
-  
-  # Filter for all current position of covers
+
   
 sensor:
   # Filter for all current climate temperatures
@@ -68,5 +56,4 @@ sensor:
       - filter: time_throttle
         window_size: "00:01"
   {% endfor %}
-  
   
