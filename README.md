@@ -1,9 +1,8 @@
 # Girea System 3000
 
-This is a custom component for Home Assistant to integrate the Gira System 3000 devices via
-espHome bluetooth proxy or other bluetooth adapters.
+This is a custom component for Home Assistant to integrate the Gira System 3000 devices via espHome bluetooth proxy or other bluetooth adapters.
 
-Currently just the shutter controller "Jal+Schaltuhr" are implemented and tested.
+Currently just the shutter "Jal+Schaltuhr" and climate "Thermostat" controller are implemented and tested.
 
 > [!NOTE]
 > Code was generated with Gemini 2.5 Flash support.
@@ -26,17 +25,22 @@ Currently just the shutter controller "Jal+Schaltuhr" are implemented and tested
 
 ## Setup
 
-First of all you need to get the bluetooth address manually:
+### Automatic setup:
+- Bring the Gira device into pairing mode
+- Open the Gira integration in HA, the Gira device will show up automatically
+- Add device, MAC address and name are filled automatically (name can be changed)
 
-- Fristly bring the shutter controller "Jal+Schaltuhr" in pairing mode to scan the bluetooth MAC 
-  address and find it in the bluetooth monitoring in Home Assistant
-- Note the MAC address down for setting it up in the Home Assistant integration
-- Add a new Device to the Girea integration using its MAC address and give it a name. It is important
-  having the shutter contrller in paring mode during setup in the integration
-- Finally push any button on the cover integration (up/down) while the device is in pairing mode
-  again
+### Manual setup:
+- If automatic discovery does not work, you can manually add the device with its MAC address
+- Getting the MAC address can be tricky, some methods:
+  - Use the homeassistant BLE integration and observe RSSI while getting the BLE antenna very close to the Gira device
+  - Use a PC with nRF scanner hardware and wireshark to search for devices with Gira manufacturing data
+- Click "Add device" in  the Gira integration and enter the MAC address and a name
+
+### Additional Sensor entities in HA:
+- To create custom displays (e.g. graphs) with the sensor data from the Gira devices, see template_editor.md on How-To create sensor entities in HA.
 
 ## Known issues
 
-- There is still a little delay between pushing the button in the home assistant ui and actual start
-  of the shutter movement.
+- There is still a little delay between pushing the button in the home assistant ui and actual start of the shutter movement. Delay is shorter the better the BLE connection. Using external antennas can improve it a lot.
+- Thermostat integration does not provide the current heating status. Might be hard to implement (not part of BLE advertisments, would require establishing a BLE connection every x seconds for active polling)

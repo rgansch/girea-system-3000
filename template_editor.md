@@ -1,4 +1,5 @@
-Code for Homeassistant->Developer Tools->Template
+TODO: proper description and formatting
+Code below is for Homeassistant->Developer Tools->Template
 Copy paste output into configuration.yaml
 Adapted from https://community.home-assistant.io/t/create-generic-template/500335
 
@@ -56,4 +57,3 @@ sensor:
       - filter: time_throttle
         window_size: "00:01"
   {% endfor %}
-  
